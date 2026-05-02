@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RGB K-Means Cluster Viewer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #667085;
+      --line: #d7dde5;
+      --accent: #0f766e;
+      --accent-dark: #115e59;
+      --shadow: 0 10px 28px rgba(20, 28, 38, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    main {
+      width: min(1380px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 32px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.65rem, 3vw, 2.5rem);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.98rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 330px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel,
+    .tool-panel,
+    .plot-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .tool-panel {
+      padding: 18px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      font-weight: 700;
+      font-size: 0.92rem;
+    }
+
+    input[type="file"],
+    input[type="range"] {
+      width: 100%;
+    }
+
+    input[type="file"] {
+      padding: 12px;
+      border: 1px dashed #9aa7b7;
+      border-radius: 8px;
+      background: #f9fafb;
+      color: var(--muted);
+    }
+
+    .k-row {
+      display: grid;
+      grid-template-columns: 1fr 58px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .k-value {
+      min-width: 58px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 800;
+      background: #f9fafb;
+    }
+
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: var(--accent);
+      color: white;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background 140ms ease, transform 140ms ease;
+    }
+
+    button:hover {
+      background: var(--accent-dark);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      background: #98a2b3;
+    }
+
+    .status {
+      min-height: 22px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .swatches {
+      display: grid;
+      gap: 8px;
+    }
+
+    .swatch {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    .swatch-color {
+      width: 34px;
+      height: 26px;
+      border: 1px solid rgba(0, 0, 0, 0.14);
+      border-radius: 6px;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 18px;
+    }
+
+    .plot-panel {
+      position: relative;
+      min-height: 560px;
+      overflow: hidden;
+    }
+
+    #plotCanvas {
+      display: block;
+      width: 100%;
+      height: min(68vh, 700px);
+      min-height: 560px;
+      background: linear-gradient(180deg, #ffffff 0%, #eef3f7 100%);
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #plotCanvas:active {
+      cursor: grabbing;
+    }
+
+    .plot-hint {
+      position: absolute;
+      left: 14px;
+      bottom: 12px;
+      color: #53606f;
+      font-size: 0.84rem;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(215, 221, 229, 0.78);
+      border-radius: 8px;
+      padding: 7px 9px;
+      backdrop-filter: blur(8px);
+    }
+
+    .images {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    figure {
+      margin: 0;
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    figcaption {
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-weight: 800;
+      font-size: 0.9rem;
+    }
+
+    .image-frame {
+      display: grid;
+      place-items: center;
+      min-height: 260px;
+      background: #eef2f6;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .image-frame canvas,
+    .image-frame img {
+      max-width: 100%;
+      max-height: 520px;
+      display: block;
+    }
+
+    .empty {
+      color: #7a8797;
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 920px) {
+      main {
+        width: min(100% - 20px, 760px);
+        padding-top: 14px;
+      }
+
+      header,
+      .layout,
+      .images {
+        grid-template-columns: 1fr;
+      }
+
+      header {
+        display: grid;
+        align-items: start;
+      }
+
+      #plotCanvas {
+        height: 460px;
+        min-height: 460px;
+      }
+
+      .plot-panel {
+        min-height: 460px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>RGB K-Means 클러스터링</h1>
+        <p class="subtitle">이미지 픽셀을 R, G, B 축의 3D 공간에 표시하고 중심 색상으로 재구성합니다.</p>
+      </div>
+    </header>
+
+    <section class="layout">
+      <aside class="tool-panel">
+        <div class="field">
+          <label for="imageInput">이미지 입력</label>
+          <input id="imageInput" type="file" accept="image/*" />
+        </div>
+
+        <div class="field">
+          <label for="kInput">클러스터 개수 k</label>
+          <div class="k-row">
+            <input id="kInput" type="range" min="2" max="12" value="4" />
+            <output id="kValue" class="k-value" for="kInput">4</output>
+          </div>
+        </div>
+
+        <button id="runButton" type="button" disabled>클러스터링 실행</button>
+        <div id="status" class="status">이미지를 선택하면 분석을 시작할 수 있습니다.</div>
+        <div id="swatches" class="swatches"></div>
+      </aside>
+
+      <div class="workspace">
+        <section class="plot-panel">
+          <canvas id="plotCanvas" aria-label="RGB 3D 산점도"></canvas>
+          <div class="plot-hint">드래그: 회전 · 휠/핀치: 확대</div>
+        </section>
+
+        <section class="images">
+          <figure>
+            <figcaption>원본 이미지</figcaption>
+            <div class="image-frame" id="originalFrame">
+              <span class="empty">이미지 없음</span>
+            </div>
+          </figure>
+          <figure>
+            <figcaption>클러스터 중심 색상 이미지</figcaption>
+            <div class="image-frame" id="clusteredFrame">
+              <span class="empty">결과 없음</span>
+            </div>
+          </figure>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const imageInput = document.querySelector("#imageInput");
+    const kInput = document.querySelector("#kInput");
+    const kValue = document.querySelector("#kValue");
+    const runButton = document.querySelector("#runButton");
+    const statusEl = document.querySelector("#status");
+    const swatchesEl = document.querySelector("#swatches");
+    const plotCanvas = document.querySelector("#plotCanvas");
+    const plotCtx = plotCanvas.getContext("2d");
+    const originalFrame = document.querySelector("#originalFrame");
+    const clusteredFrame = document.querySelector("#clusteredFrame");
+
+    const sourceCanvas = document.createElement("canvas");
+    const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+    const clusteredCanvas = document.createElement("canvas");
+    const clusteredCtx = clusteredCanvas.getContext("2d");
+
+    let pixels = [];
+    let plotPoints = [];
+    let centers = [];
+    let labels = [];
+    let sourceImageData = null;
+    let rotationX = -0.58;
+    let rotationY = 0.78;
+    let zoom = 1;
+    let isDragging = false;
+    let lastPointer = { x: 0, y: 0 };
+
+    kInput.addEventListener("input", () => {
+      kValue.textContent = kInput.value;
+      if (pixels.length) runButton.disabled = false;
+    });
+
+    imageInput.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      statusEl.textContent = "이미지를 읽는 중입니다...";
+      runButton.disabled = true;
+
+      try {
+        const image = await loadImage(file);
+        prepareImage(image);
+        showOriginal();
+        resetResult();
+        drawPlot();
+        runButton.disabled = false;
+        statusEl.textContent = `${sourceCanvas.width} x ${sourceCanvas.height} 이미지, 픽셀 ${pixels.length.toLocaleString("ko-KR")}개를 불러왔습니다.`;
+      } catch (error) {
+        statusEl.textContent = "이미지를 불러오지 못했습니다.";
+        console.error(error);
+      }
+    });
+
+    runButton.addEventListener("click", () => {
+      if (!pixels.length) return;
+      runButton.disabled = true;
+      statusEl.textContent = "k-means 클러스터링을 계산하는 중입니다...";
+
+      requestAnimationFrame(() => {
+        const k = Number(kInput.value);
+        const result = runKMeans(pixels, k, 18);
+        centers = result.centers;
+        labels = result.labels;
+        plotPoints = makePlotPoints(pixels, labels);
+        drawClusteredImage();
+        drawSwatches();
+        drawPlot();
+        statusEl.textContent = `k=${k} 클러스터링 완료. 중심 색상으로 이미지를 다시 칠했습니다.`;
+        runButton.disabled = false;
+      });
+    });
+
+    function loadImage(file) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = URL.createObjectURL(file);
+      });
+    }
+
+    function prepareImage(image) {
+      const maxSide = 320;
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const width = Math.max(1, Math.round(image.naturalWidth * scale));
+      const height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+      sourceCanvas.width = width;
+      sourceCanvas.height = height;
+      sourceCtx.clearRect(0, 0, width, height);
+      sourceCtx.drawImage(image, 0, 0, width, height);
+      sourceImageData = sourceCtx.getImageData(0, 0, width, height);
+
+      pixels = [];
+      const data = sourceImageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 16) continue;
+        pixels.push([data[i], data[i + 1], data[i + 2]]);
+      }
+
+      centers = [];
+      labels = [];
+      plotPoints = makePlotPoints(pixels, null);
+    }
+
+    function showOriginal() {
+      originalFrame.innerHTML = "";
+      originalFrame.appendChild(sourceCanvas);
+    }
+
+    function resetResult() {
+      clusteredFrame.innerHTML = '<span class="empty">결과 없음</span>';
+      swatchesEl.innerHTML = "";
+    }
+
+    function runKMeans(allPixels, k, iterations) {
+      const centers = initializeCenters(allPixels, k).map((point) => [...point]);
+      const labels = new Uint16Array(allPixels.length);
+
+      for (let iter = 0; iter < iterations; iter++) {
+        const sums = Array.from({ length: k }, () => [0, 0, 0, 0]);
+        let changed = false;
+
+        for (let i = 0; i < allPixels.length; i++) {
+          const label = nearestCenter(allPixels[i], centers);
+          if (labels[i] !== label) changed = true;
+          labels[i] = label;
+          sums[label][0] += allPixels[i][0];
+          sums[label][1] += allPixels[i][1];
+          sums[label][2] += allPixels[i][2];
+          sums[label][3]++;
+        }
+
+        for (let c = 0; c < k; c++) {
+          if (sums[c][3] === 0) {
+            centers[c] = [...allPixels[Math.floor(Math.random() * allPixels.length)]];
+          } else {
+            centers[c] = [
+              sums[c][0] / sums[c][3],
+              sums[c][1] / sums[c][3],
+              sums[c][2] / sums[c][3],
+            ];
+          }
+        }
+
+        if (!changed && iter > 1) break;
+      }
+
+      return { centers: centers.map((center) => center.map(Math.round)), labels };
+    }
+
+    function initializeCenters(allPixels, k) {
+      const sample = allPixels.filter((_, index) => index % Math.max(1, Math.floor(allPixels.length / 5000)) === 0);
+      const ordered = [...sample].sort((a, b) => luminance(a) - luminance(b));
+      return Array.from({ length: k }, (_, index) => {
+        const position = Math.round((index + 0.5) * ordered.length / k);
+        return ordered[Math.min(ordered.length - 1, position)];
+      });
+    }
+
+    function luminance(pixel) {
+      return pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
+    }
+
+    function nearestCenter(pixel, centerList) {
+      let best = 0;
+      let bestDistance = Infinity;
+      for (let i = 0; i < centerList.length; i++) {
+        const dr = pixel[0] - centerList[i][0];
+        const dg = pixel[1] - centerList[i][1];
+        const db = pixel[2] - centerList[i][2];
+        const distance = dr * dr + dg * dg + db * db;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = i;
+        }
+      }
+      return best;
+    }
+
+    function drawClusteredImage() {
+      clusteredCanvas.width = sourceCanvas.width;
+      clusteredCanvas.height = sourceCanvas.height;
+
+      const output = clusteredCtx.createImageData(sourceCanvas.width, sourceCanvas.height);
+      const source = sourceImageData.data;
+      let pixelIndex = 0;
+
+      for (let i = 0; i < source.length; i += 4) {
+        if (source[i + 3] < 16) {
+          output.data[i + 3] = 0;
+          continue;
+        }
+
+        const center = centers[labels[pixelIndex]];
+        output.data[i] = center[0];
+        output.data[i + 1] = center[1];
+        output.data[i + 2] = center[2];
+        output.data[i + 3] = source[i + 3];
+        pixelIndex++;
+      }
+
+      clusteredCtx.putImageData(output, 0, 0);
+      clusteredFrame.innerHTML = "";
+      clusteredFrame.appendChild(clusteredCanvas);
+    }
+
+    function drawSwatches() {
+      const counts = Array.from({ length: centers.length }, () => 0);
+      labels.forEach((label) => counts[label]++);
+      swatchesEl.innerHTML = centers.map((center, index) => {
+        const [r, g, b] = center;
+        const percent = pixels.length ? Math.round((counts[index] / pixels.length) * 1000) / 10 : 0;
+        return `
+          <div class="swatch">
+            <span class="swatch-color" style="background: rgb(${r}, ${g}, ${b})"></span>
+            <span>Cluster ${index + 1}: rgb(${r}, ${g}, ${b}) · ${percent}%</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function makePlotPoints(allPixels, pointLabels) {
+      const step = Math.max(1, Math.floor(allPixels.length / 9000));
+      const points = [];
+      for (let i = 0; i < allPixels.length; i += step) {
+        points.push({
+          rgb: allPixels[i],
+          label: pointLabels ? pointLabels[i] : -1,
+        });
+      }
+      return points;
+    }
+
+    function resizePlotCanvas() {
+      const rect = plotCanvas.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.round(rect.width * ratio));
+      const height = Math.max(1, Math.round(rect.height * ratio));
+      if (plotCanvas.width !== width || plotCanvas.height !== height) {
+        plotCanvas.width = width;
+        plotCanvas.height = height;
+      }
+      plotCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      return { width: rect.width, height: rect.height };
+    }
+
+    function drawPlot() {
+      const { width, height } = resizePlotCanvas();
+      plotCtx.clearRect(0, 0, width, height);
+      drawAxes(width, height);
+
+      const sorted = plotPoints
+        .map((point) => {
+          const projected = project(point.rgb, width, height);
+          return { ...point, ...projected };
+        })
+        .sort((a, b) => a.depth - b.depth);
+
+      for (const point of sorted) {
+        const [r, g, b] = point.rgb;
+        plotCtx.fillStyle = point.label >= 0 && centers[point.label]
+          ? `rgb(${centers[point.label][0]}, ${centers[point.label][1]}, ${centers[point.label][2]})`
+          : `rgb(${r}, ${g}, ${b})`;
+        plotCtx.globalAlpha = point.label >= 0 ? 0.78 : 0.55;
+        plotCtx.beginPath();
+        plotCtx.arc(point.x, point.y, point.label >= 0 ? 2.15 : 1.75, 0, Math.PI * 2);
+        plotCtx.fill();
+      }
+      plotCtx.globalAlpha = 1;
+
+      centers.forEach((center, index) => {
+        const projected = project(center, width, height);
+        plotCtx.fillStyle = `rgb(${center[0]}, ${center[1]}, ${center[2]})`;
+        plotCtx.strokeStyle = "#111827";
+        plotCtx.lineWidth = 2;
+        plotCtx.beginPath();
+        plotCtx.arc(projected.x, projected.y, 7, 0, Math.PI * 2);
+        plotCtx.fill();
+        plotCtx.stroke();
+        plotCtx.fillStyle = "#111827";
+        plotCtx.font = "700 12px system-ui";
+        plotCtx.fillText(`${index + 1}`, projected.x + 10, projected.y - 8);
+      });
+    }
+
+    function drawAxes(width, height) {
+      const axes = [
+        { end: [255, 0, 0], color: "#dc2626", label: "R" },
+        { end: [0, 255, 0], color: "#16a34a", label: "G" },
+        { end: [0, 0, 255], color: "#2563eb", label: "B" },
+      ];
+      const origin = project([0, 0, 0], width, height);
+
+      plotCtx.lineWidth = 2;
+      plotCtx.font = "800 15px system-ui";
+      axes.forEach((axis) => {
+        const end = project(axis.end, width, height);
+        plotCtx.strokeStyle = axis.color;
+        plotCtx.fillStyle = axis.color;
+        plotCtx.beginPath();
+        plotCtx.moveTo(origin.x, origin.y);
+        plotCtx.lineTo(end.x, end.y);
+        plotCtx.stroke();
+        plotCtx.fillText(axis.label, end.x + 8, end.y - 8);
+      });
+
+      plotCtx.strokeStyle = "rgba(17, 24, 39, 0.13)";
+      plotCtx.lineWidth = 1;
+      const corners = [
+        [0, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255],
+        [255, 255, 0], [255, 0, 255], [0, 255, 255], [255, 255, 255],
+      ].map((corner) => project(corner, width, height));
+      const edges = [[0, 1], [0, 2], [0, 3], [1, 4], [1, 5], [2, 4], [2, 6], [3, 5], [3, 6], [4, 7], [5, 7], [6, 7]];
+      edges.forEach(([a, b]) => {
+        plotCtx.beginPath();
+        plotCtx.moveTo(corners[a].x, corners[a].y);
+        plotCtx.lineTo(corners[b].x, corners[b].y);
+        plotCtx.stroke();
+      });
+    }
+
+    function project(rgb, width, height) {
+      const centered = rgb.map((value) => value - 127.5);
+      const cosY = Math.cos(rotationY);
+      const sinY = Math.sin(rotationY);
+      const cosX = Math.cos(rotationX);
+      const sinX = Math.sin(rotationX);
+
+      const x1 = centered[0] * cosY - centered[2] * sinY;
+      const z1 = centered[0] * sinY + centered[2] * cosY;
+      const y1 = centered[1] * cosX - z1 * sinX;
+      const z2 = centered[1] * sinX + z1 * cosX;
+
+      const scale = Math.min(width, height) * 0.00245 * zoom;
+      return {
+        x: width / 2 + x1 * scale,
+        y: height / 2 - y1 * scale,
+        depth: z2,
+      };
+    }
+
+    plotCanvas.addEventListener("pointerdown", (event) => {
+      isDragging = true;
+      plotCanvas.setPointerCapture(event.pointerId);
+      lastPointer = { x: event.clientX, y: event.clientY };
+    });
+
+    plotCanvas.addEventListener("pointermove", (event) => {
+      if (!isDragging) return;
+      const dx = event.clientX - lastPointer.x;
+      const dy = event.clientY - lastPointer.y;
+      rotationY += dx * 0.009;
+      rotationX = Math.max(-1.45, Math.min(1.45, rotationX + dy * 0.009));
+      lastPointer = { x: event.clientX, y: event.clientY };
+      drawPlot();
+    });
+
+    plotCanvas.addEventListener("pointerup", () => {
+      isDragging = false;
+    });
+
+    plotCanvas.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      zoom = Math.max(0.58, Math.min(2.4, zoom * (event.deltaY > 0 ? 0.92 : 1.08)));
+      drawPlot();
+    }, { passive: false });
+
+    window.addEventListener("resize", drawPlot);
+    drawPlot();
+  </script>
+</body>
+</html>
